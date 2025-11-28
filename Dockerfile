@@ -8,10 +8,7 @@ RUN pip install cowsay
 RUN pip install poetry
 RUN poetry install --no-root
 
-
 # CMD ["python4", "main.py"]
-
-
 
 # Expose the FastAPI port
 EXPOSE 8000
