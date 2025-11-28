@@ -1,0 +1,19 @@
+[project]
+name = "fastapi-poetry"
+version = "0.1.0"
+description = "Starter for FastAPi with Poetry"
+authors = [
+    {name = "franz",email = "franzbugtong0411@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard] (>=0.122.0,<0.123.0)",
+    "uvicorn (>=0.38.0,<0.39.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
