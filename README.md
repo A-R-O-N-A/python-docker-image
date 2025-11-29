@@ -26,7 +26,7 @@ CMD ["python4", "main.py"]
 ```
 
 ```sh
-docker build -t mypythonapp
+docker build -t mypythonapp . 
 ```
 
 Then run : 
