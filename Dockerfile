@@ -2,7 +2,7 @@ FROM python
 WORKDIR /app
 COPY . /app
 
-RUN pip install cowsay
+# RUN pip install cowsay
 
 # install poetry
 RUN pip install poetry
@@ -18,6 +18,6 @@ EXPOSE 8000
 # access via localhost:8000 or 127.0.0.1:8000
 # docker run -p 8000:8000 mypythonapp
 
-CMD ["poetry", "run", "fastapi", "dev", "hello_fastapi.py", "--host", "0.0.0.0"]
+CMD ["poetry", "run", "fastapi", "dev", "main.py", "--host", "0.0.0.0"]
 
 

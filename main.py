@@ -1,25 +1,14 @@
-import os
-import cowsay
+from typing import Union
+from fastapi import FastAPI
 
-import subprocess
-import sys
+app = FastAPI()
+
+@app.get('/')
+def read_root():
+    return {'Waifu' : 'Flandre Scarlet'}
+
+@app.get('/items/{item_id}')
+def read_item(item_id: int, q: Union[str, None] = None):
+    return {'item_id' : item_id, 'q' : q}
 
 
-print('Hello to docker')
-print('I hope i can learn docker with python')
-print('The current directory is : ', os.getcwd())
-
-print('This is a new change')
-
-cowsay.cow('Good Moooooooooooooorning !')
-
-# Test Poetry (optional)
-try:
-    # Run poetry --version in a subprocess
-    result = subprocess.run([sys.executable, "-m", "poetry", "--version"], capture_output=True, text=True)
-    if result.returncode == 0:
-        print("Poetry is installed:", result.stdout.strip())
-    else:
-        print("Poetry not found.")
-except Exception as e:
-    print("Error checking Poetry:", e)
