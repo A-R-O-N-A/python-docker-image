@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from pydantic import BaseModel
 
+
 class StoryOptionsSchema(BaseModel):
     text: str
     node_id: Optional[int] = None
@@ -20,9 +21,10 @@ class CompleteStoryNodeResponse(StoryNodeBase):
     class Config:
         from_attributes = True
 
+
 class StoryBase(BaseModel):
     title: str
-    session_id: str
+    session_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -30,6 +32,7 @@ class StoryBase(BaseModel):
 
 class CreateStoryRequest(BaseModel):
     theme: str
+
 
 class CompleteStoryResponse(StoryBase):
     id: int
