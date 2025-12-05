@@ -50,3 +50,25 @@ CMD ["poetry", "run", "fastapi", "dev", "hello_fastapi.py", "--host", "0.0.0.0"]
 # access via localhost:8000 or 127.0.0.1:8000
 docker run -p 8000:8000 mypythonapp
 ```
+
+
+# Python 3 import errors
+
+For some reason we ran accross module import errors where we cant do `from core.config import settings`
+but instead have to do : 
+
+```python
+from .core.config import settings
+```
+
+and others the like, such as : 
+
+```python
+# while in schemas/story.py
+
+from ..core.config import settings
+```
+
+this seems to be due to using python 3 according to this article : 
+https://stackoverflow.com/questions/35330964/no-module-named-core-when
+
