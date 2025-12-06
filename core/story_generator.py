@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_ollama import ChatOllama
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
@@ -21,6 +22,9 @@ class StoryGenerator:
     def _get_llm(cls):
         # return ChatOpenAI(model="gpt-4-turbo")
         return ChatGoogleGenerativeAI(model="gemini-2.5-pro")
+    
+        # ollama chat isnt suitable for this current setup for json output
+        # return ChatOllama(model='llama3.2:1b')
     
     @classmethod
     def generate_story(cls, db: Session, session_id: str, theme: str = "Anime") -> Story:
