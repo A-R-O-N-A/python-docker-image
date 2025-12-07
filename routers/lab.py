@@ -4,7 +4,9 @@ from fastapi import APIRouter
 # test ollama chat from langchain
 from langchain_ollama import ChatOllama
 
-from ..schemas.lab import LabBase
+from ..schemas.lab import LabBase, PingResponse, ChatRequest
+
+from typing import Dict
 
 router = APIRouter(
     prefix='/lab',
@@ -62,3 +64,26 @@ def post_ollama_chat(request: LabBase):
     ai_response = llm.invoke(messages)
 
     return ai_response
+
+
+@router.post('/test/ping')
+def post_ping(request: PingResponse):
+
+    return {"message_ping": request.messages}
+
+@router.post('/test/array')
+def post_ollama_array(request: ChatRequest):
+
+    # convert list of ChatMessage to list of tuples
+    req_messages = [tuple(message.model_dump().values()) for message in request.messages]
+
+    # now lets test the ai response with memory
+    try :
+        messages = req_messages
+        ai_response = llm.invoke(messages)
+        return ai_response
+    except Exception as e:
+        return {
+            "error": str(e),
+            "messages" : req_messages
+        }
