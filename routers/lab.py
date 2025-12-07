@@ -4,6 +4,8 @@ from fastapi import APIRouter
 # test ollama chat from langchain
 from langchain_ollama import ChatOllama
 
+from ..schemas.lab import LabBase
+
 router = APIRouter(
     prefix='/lab',
     tags=['lab']
@@ -43,3 +45,20 @@ def get_ollama_chat(ollama_chat: str):
     ai_response = llm.invoke(messages)
 
     return {"ai response" : ai_response}
+
+@router.post('/test/chat/ollama')
+def post_ollama_chat(request: LabBase):
+    messages=[
+        (
+            'system',
+            'You are Remilia Scarlet, a vampire from Touhou Project'
+        ),
+        (
+            'human',
+            request.data_input
+        )
+    ]
+
+    ai_response = llm.invoke(messages)
+
+    return ai_response
