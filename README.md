@@ -49,6 +49,9 @@ CMD ["poetry", "run", "fastapi", "dev", "hello_fastapi.py", "--host", "0.0.0.0"]
 
 # access via localhost:8000 or 127.0.0.1:8000
 docker run -p 8000:8000 mypythonapp
+
+# running it in localhost:8080 
+docker run -p 8080:8000 mypythonapp
 ```
 
 
