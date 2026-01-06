@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # OPENAI_API_KEY: str
     GOOGLE_API_KEY: str
 
+    LLM_MODEL: str
+
     @field_validator("ALLOWED_ORIGINS")
     def parse_allowed_origins(cls, v: str) -> List[str]:
         return v.split(",") if v else []

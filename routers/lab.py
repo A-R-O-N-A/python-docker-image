@@ -6,6 +6,8 @@ from langchain_ollama import ChatOllama
 
 from ..schemas.lab import LabBase, PingResponse, ChatRequest
 
+from ..core.config import settings
+
 from typing import Dict
 
 router = APIRouter(
@@ -26,7 +28,7 @@ def get_test_chat_endpoint(test_chat: str):
     return {"chat" : test_chat}
 
 llm = ChatOllama(
-    model='llama3.2:1b',
+    model=settings.LLM_MODEL,
     temperature=0.5,
 )
 
