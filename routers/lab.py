@@ -1,19 +1,38 @@
 # test router
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile, Form
 
 # test ollama chat from langchain
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-from ..schemas.lab import LabBase, PingResponse, ChatRequest
+from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+import pdfplumber
+
+from ..schemas.lab import LabBase, PingResponse, ChatRequest, RAGFileRequest, RAGFileResponse, RAGChatRequest
 
 from ..core.config import settings
 
-from typing import Dict
+from io import BytesIO
+
+from PyPDF2 import PdfReader
+
+from typing import Dict, Optional
+
+
+from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response
 
 router = APIRouter(
     prefix='/lab',
     tags=['lab']
 )
+
+embeddings = OllamaEmbeddings(model=settings.LLM_EMBEDDING_MODEL)
+
+# in memory FAISS vector store
+
+vector_store : Optional[FAISS] = None
 
 @router.get('/test')
 def test_endpoint():
@@ -29,6 +48,7 @@ def get_test_chat_endpoint(test_chat: str):
 
 llm = ChatOllama(
     model=settings.LLM_MODEL,
+    # model="llama3.2:1b",
     temperature=0.5,
 )
 
@@ -81,11 +101,209 @@ def post_ollama_array(request: ChatRequest):
 
     # now lets test the ai response with memory
     try :
+
         messages = req_messages
         ai_response = llm.invoke(messages)
         return ai_response
     except Exception as e:
+
         return {
             "error": str(e),
             "messages" : req_messages
         }
+    
+@router.post('/test/rag/file', response_model=RAGFileResponse)
+# def post_rag_file(request: RAGFileRequest):
+async def post_rag_file(file: UploadFile = File(...)):
+
+    # return {"rag_ping" : request}
+    contents = await file.read()
+    # text = contents.decode('utf-8')
+
+    text = None
+    ctype = file.content_type or ""
+
+    if ctype.startswith('text/'):
+        text = contents.decode('utf-8', errors='replace')
+    
+    elif ctype == 'application/pdf':
+        reader = PdfReader(BytesIO(contents))
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+
+    else : 
+        import base64
+        text = base64.b64encode(contents).decode('utf-8')
+
+
+    vector = embeddings.embed_query(text) if text else None
+    # vector = embeddings.embed_query(str(contents))
+
+    return {
+        "filename" : file.filename,
+        "content_type" : ctype,
+        "size_bytes" : len(contents),
+        "embeddings" : vector
+    }
+
+@router.post('/test/rag/file/chat', response_model=RAGFileResponse)
+async def post_rag_file_chat(file: UploadFile = File(...), query: Optional[str] = Form(None)):
+
+    contents = await file.read()
+
+    text = None
+    ctype = file.content_type or ""
+
+    if ctype.startswith('text/'):
+        text = contents.decode('utf-8', errors='replace')
+    
+    elif ctype == 'application/pdf':
+        reader = PdfReader(BytesIO(contents))
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+
+    else : 
+        import base64
+        text = base64.b64encode(contents).decode('utf-8')
+
+
+    vector = embeddings.embed_query(text) if text else None
+
+    ## Add to FAISS in-memory
+
+    global vector_store
+
+    if text : 
+        doc = Document(
+            page_content=text, 
+            metadata={
+                'filename' : file.filename, 
+                "content_type" : ctype
+            })
+
+        if vector_store is None:
+            vector_store = FAISS.from_documents([doc], embeddings)
+        
+        else : 
+            vector_store.add_documents([doc])
+
+        # Query immediately
+
+        results= [] 
+
+        if vector_store is not None and text:
+
+            search_text = query if query else text
+
+            hits = vector_store.similarity_search(search_text, k=5)
+            # hits = vector_store.similarity_search(text, k=5)
+
+            results = [
+                {
+                    "filename" : h.metadata.get('filename'),
+                    "content_type" : h.metadata.get('content_type'),
+                    "text_snippet" : h.page_content[:300],
+                }
+                for h in hits
+            ]
+        
+        return {
+            "filename" : file.filename,
+            "content_type" : ctype,
+            "size_bytes" : len(contents),
+            "embeddings" : vector,
+            "results" : results,
+            "query": query
+        }
+    
+@router.post('/test/rag/file/chat/v2', response_model=RAGFileResponse)
+async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[str] = Form(None)):
+
+    # contents = await file.read()
+    # text = None
+    # ctype = file.content_type or ""
+
+    # if ctype.startswith('text/'):
+    #     text = contents.decode('utf-8', errors='replace')
+    # elif ctype == 'application/pdf':
+
+    #     with pdfplumber.open(BytesIO(contents)) as pdf:
+    #         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    # else:
+    #     import base64
+    #     text = base64.b64encode(contents).decode('utf-8')
+
+    # TODO test the utility function
+    ## Its working!
+    text, ctype, contents = await extract_text_from_file(file)
+
+    vector = embeddings.embed_query(text) if text else None
+
+    global vector_store
+    results = []
+    answer = None
+
+    if text:
+
+        # splitter = RecursiveCharacterTextSplitter(
+        #     chunk_size=1000,
+        #     chunk_overlap=200,
+        #     separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""],
+        #     length_function=len,
+        #     is_separator_regex=False,
+        # )
+        # docs = splitter.create_documents(
+        #     [text],
+        #     metadatas=[{"filename": file.filename, "content_type": ctype}]
+        # )
+
+        # TODO test the utility
+        # it works
+        docs = split_text_into_chunks(text, ctype, file, chunk_size=1000, chunk_overlap=200)
+
+
+        if vector_store is None:
+            vector_store = FAISS.from_documents(docs, embeddings)
+        else:
+            vector_store.add_documents(docs)
+
+        # search_text = query if query else text[:800]
+        # hits = vector_store.similarity_search(search_text, k=5)
+        # results = [
+        #     {
+        #         "filename": h.metadata.get('filename'),
+        #         "content_type": h.metadata.get('content_type'),
+        #         "text_snippet": h.page_content[:300],
+        #     }
+        #     for h in hits
+        # ]
+
+        # TODO test the utility function
+        # It works !
+        hits, results = perform_vector_similarity_search(vector_store, query, text, top_k=5)
+
+
+        # LLM answer using retrieved context
+        # context = "\n\n".join(h.page_content[:800] for h in hits)
+        # messages = [
+
+        #     ("system", f"You are the character described in this document. Respond as this character using the provided information about yourself. Stay in character and use first person."),
+        #     ("system", f"Character Information:\n{context}"),
+        #     ("human", query or "Introduce yourself.")
+        # ]
+
+        # ai_msg = llm.invoke(messages)
+        # answer = ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
+
+        # TODO test the utility function
+        answer = generate_chat_response(llm, query, hits)
+
+
+    # Return values in API
+    return {
+        "filename": file.filename,
+        "content_type": ctype,
+        "size_bytes": len(contents),
+        "embeddings": vector,
+        "results": results,
+        "query": query,
+        "answer": answer,
+    }

@@ -1,4 +1,6 @@
 from pydantic import BaseModel
+from typing import Annotated, Optional, Any
+from fastapi import UploadFile, File
 
 class LabBase(BaseModel):
     data_input: str
@@ -12,3 +14,21 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+
+class RAGFileResponse(BaseModel):
+    filename: str
+    content_type: str
+    size_bytes: int
+    embeddings : Optional[list[float]] = None
+    results : Optional[list[dict[str, Any]]] = None
+    query : Optional[str] = None,
+    answer : Optional[str] = None,
+    # embeddings : list[float]
+
+class RAGFileRequest(BaseModel):
+    file: Annotated[UploadFile, File()]
+
+class RAGChatRequest(BaseModel):
+    file: Annotated[UploadFile, File()]
+    query: Optional[str] = None
+
