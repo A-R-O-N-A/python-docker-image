@@ -13,7 +13,7 @@ create_tables()
 
 
 app = FastAPI(
-    title="Cunny Adventure API",
+    title="MISO AI",
     description="API for Cunny Adventure game",
     version="0.1.0",
     docs_url="/docs",

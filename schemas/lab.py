@@ -14,6 +14,8 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+    embeddings: Optional[dict[str, list[float]]] = None
+    documents: Optional[dict[str, dict[str, Any]]] = None
 
 class RAGFileResponse(BaseModel):
     filename: str
@@ -31,4 +33,10 @@ class RAGFileRequest(BaseModel):
 class RAGChatRequest(BaseModel):
     file: Annotated[UploadFile, File()]
     query: Optional[str] = None
+
+class RAGVectorizeResponse(BaseModel): 
+    filename: str
+    content_type: str
+    size_bytes: int
+    embeddings : Optional[list[float]] = None
 

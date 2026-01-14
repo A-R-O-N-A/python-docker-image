@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import pdfplumber
 
-from ..schemas.lab import LabBase, PingResponse, ChatRequest, RAGFileRequest, RAGFileResponse, RAGChatRequest
+from ..schemas.lab import LabBase, PingResponse, ChatRequest, RAGFileRequest, RAGFileResponse, RAGChatRequest, RAGVectorizeResponse 
 
 from ..core.config import settings
 
@@ -21,7 +21,7 @@ from PyPDF2 import PdfReader
 from typing import Dict, Optional
 
 
-from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response
+from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history
 
 router = APIRouter(
     prefix='/lab',
@@ -217,22 +217,9 @@ async def post_rag_file_chat(file: UploadFile = File(...), query: Optional[str] 
 @router.post('/test/rag/file/chat/v2', response_model=RAGFileResponse)
 async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[str] = Form(None)):
 
-    # contents = await file.read()
-    # text = None
-    # ctype = file.content_type or ""
-
-    # if ctype.startswith('text/'):
-    #     text = contents.decode('utf-8', errors='replace')
-    # elif ctype == 'application/pdf':
-
-    #     with pdfplumber.open(BytesIO(contents)) as pdf:
-    #         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-    # else:
-    #     import base64
-    #     text = base64.b64encode(contents).decode('utf-8')
-
+    ## Extract file contents
     # TODO test the utility function
-    ## Its working!
+
     text, ctype, contents = await extract_text_from_file(file)
 
     vector = embeddings.embed_query(text) if text else None
@@ -242,21 +229,9 @@ async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[st
     answer = None
 
     if text:
-
-        # splitter = RecursiveCharacterTextSplitter(
-        #     chunk_size=1000,
-        #     chunk_overlap=200,
-        #     separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""],
-        #     length_function=len,
-        #     is_separator_regex=False,
-        # )
-        # docs = splitter.create_documents(
-        #     [text],
-        #     metadatas=[{"filename": file.filename, "content_type": ctype}]
-        # )
-
+        
+        ## Split and chunk the document
         # TODO test the utility
-        # it works
         docs = split_text_into_chunks(text, ctype, file, chunk_size=1000, chunk_overlap=200)
 
 
@@ -265,35 +240,14 @@ async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[st
         else:
             vector_store.add_documents(docs)
 
-        # search_text = query if query else text[:800]
-        # hits = vector_store.similarity_search(search_text, k=5)
-        # results = [
-        #     {
-        #         "filename": h.metadata.get('filename'),
-        #         "content_type": h.metadata.get('content_type'),
-        #         "text_snippet": h.page_content[:300],
-        #     }
-        #     for h in hits
-        # ]
-
+        ## Similarity search from vector via query
         # TODO test the utility function
-        # It works !
+
         hits, results = perform_vector_similarity_search(vector_store, query, text, top_k=5)
 
-
-        # LLM answer using retrieved context
-        # context = "\n\n".join(h.page_content[:800] for h in hits)
-        # messages = [
-
-        #     ("system", f"You are the character described in this document. Respond as this character using the provided information about yourself. Stay in character and use first person."),
-        #     ("system", f"Character Information:\n{context}"),
-        #     ("human", query or "Introduce yourself.")
-        # ]
-
-        # ai_msg = llm.invoke(messages)
-        # answer = ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
-
+        ## LLM answer using retrieved context
         # TODO test the utility function
+
         answer = generate_chat_response(llm, query, hits)
 
 
@@ -307,3 +261,117 @@ async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[st
         "query": query,
         "answer": answer,
     }
+
+@router.post('/test/rag/file/vectorize/', response_model=RAGVectorizeResponse)
+async def post_rag_file_vectorize(file: UploadFile = File(...)):
+    
+    text, ctype, contents = await extract_text_from_file(file)
+
+    vector = embeddings.embed_query(text) if text else None
+
+    return {
+        'filename' : file.filename,
+        'content_type' : ctype,
+        'size_bytes' : len(contents),
+        'embeddings' : vector,
+    }
+
+
+@router.post('/test/rag/chat/ollama')
+async def post_rag_chat_ollama(request: ChatRequest):
+
+    # convert list of ChatMessage to list of tuples
+    req_messages = [tuple(message.model_dump().values()) for message in request.messages]
+
+    # now lets test the ai response with memory
+    try :
+
+        #######################
+        global vector_store
+        results = []
+        answer = None
+
+        # Extract and add documents to vector store if provided
+        if request.documents:
+            import base64
+            docs_to_add = []
+            
+            for doc_id, doc_data in request.documents.items():
+                try:
+                    # Decode base64 content
+                    content_bytes = base64.b64decode(doc_data['content'])
+                    text, ctype, _ = await extract_text_from_content(
+                        content_bytes,
+                        doc_data['name'],
+                        doc_data['mime_type']
+                    )
+                    
+                    if text:
+                        # Split into chunks using v2 (handles None file)
+                        chunks = split_text_into_chunks_v2(text, ctype, file=None, chunk_size=1000, chunk_overlap=200)
+                        
+                        # Add metadata to chunks
+                        for chunk in chunks:
+                            chunk.metadata.update({
+                                "doc_id": doc_id,
+                                "filename": doc_data['name'],
+                                "content_type": doc_data['mime_type']
+                            })
+                        
+                        docs_to_add.extend(chunks)
+                except Exception as chunk_error:
+                    results.append({"error": f"Failed to process {doc_data['name']}: {str(chunk_error)}"})
+            
+            # Add to vector store
+            if docs_to_add:
+                if vector_store is None:
+                    vector_store = FAISS.from_documents(docs_to_add, embeddings)
+                else:
+                    vector_store.add_documents(docs_to_add)
+        
+        # Perform similarity search using embeddings
+        if vector_store is not None and request.embeddings:
+            for doc_id, embedding_vector in request.embeddings.items():
+                hits = vector_store.similarity_search_by_vector(embedding_vector, k=10)
+                results.extend([
+                    {
+                        "doc_id": doc_id,
+                        "filename": h.metadata.get('filename'),
+                        "text_snippet": h.page_content[:500],
+                    }
+                    for h in hits
+                ])
+
+        # Generate AI response with context from retrieved documents
+        context = "\n".join([hit.page_content for hit in vector_store.similarity_search_by_vector(
+            list(request.embeddings.values())[0], k=5
+        ) if vector_store and request.embeddings]) if vector_store and request.embeddings else ""
+        
+        ai_response = generate_chat_response_with_history(llm, context, req_messages)
+
+        # Generate AI response with context
+        # ai_response = llm.invoke(req_messages)
+
+        # return ai_response
+
+        return {
+            "ai_response" : ai_response,
+            "results" : results,
+        }
+
+        # return {
+        #     # "ai_response": ai_response,
+        #     "ai_response": answer,
+        #     "results": results,
+        #     "vector_store_exists": vector_store is not None,
+        #     "embeddings" : request.embeddings
+        # }
+
+
+    except Exception as e:
+
+        return {
+            "error": str(e),
+            "messages" : req_messages,
+            "embeddings" : request.embeddings
+        }

@@ -4,7 +4,24 @@ from fastapi import UploadFile, File
 from langchain_ollama import ChatOllama
 
 # TODO File content extractor
-
+async def extract_text_from_content(content: bytes, filename: str, content_type: str):
+    """Extract text from raw file content"""
+    text = None
+    
+    if content_type.startswith('text/'):
+        text = content.decode('utf-8', errors='replace')
+    
+    elif content_type == 'application/pdf':
+        from PyPDF2 import PdfReader
+        from io import BytesIO
+        reader = PdfReader(BytesIO(content))
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+    
+    else:
+        import base64
+        text = base64.b64encode(content).decode('utf-8')
+    
+    return text, content_type, content
 
 async def extract_text_from_file(file: UploadFile = File(...)) -> str:
     contents = await file.read()
@@ -54,6 +71,28 @@ def split_text_into_chunks(text: str, ctype: str, file: UploadFile, chunk_size: 
 
     return docs
 
+def split_text_into_chunks_v2(text: str, ctype: str, file: UploadFile = None, chunk_size: int=1000, chunk_overlap: int=200) -> list[str]:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""],
+        length_function=len,
+        is_separator_regex=False,
+    )
+
+    filename = file.filename if file else "unknown"
+    
+    docs = splitter.create_documents(
+        [text],
+        metadatas=[{
+            "filename": filename,
+            "content_type": ctype,
+        }]
+    )
+
+    return docs
 # TODO vector similarity search
 
 def perform_vector_similarity_search(vector_store, query: str,text: str ,top_k: int=5) -> list[dict]:
@@ -79,7 +118,7 @@ def generate_chat_response(llm: ChatOllama, query: str, hits: list) -> str:
 
     context = "\n\n".join(h.page_content[:800] for h in hits)
     messages = [
-        ('system', f'You are the character described in the context provided. Use the context to answer the user query. If the context does not contain the answer, respond with "I do not know".\n\nContext:\n{context}'),
+        ("system", f"You are the character described in this document. Respond as this character using the provided information about yourself. Stay in character and use first person."),
         ('system', f'Character Information:\n{context}'),
         ('human', query or 'Introduce yourself.')
     ]
@@ -89,7 +128,25 @@ def generate_chat_response(llm: ChatOllama, query: str, hits: list) -> str:
 
     return answer
 
+def generate_chat_response_with_history(llm: ChatOllama, context: str, req_messages: list) -> str:
+    """Generate chat response with conversation history and context"""
+    
+    # Build messages with system context first
+    messages = [
+        # ("system", f"You are a helpful assistant. Use the following information to answer questions:\n\nContext:\n{context}"),
+        ("system", f"You are the character described in this document. Respond as this character using the provided information about yourself. Stay in character and use first person."),
+        ('system', f'Respond briefly, keep responses simple, clean, with a maximum of one sentence.'),
+        ('system', f'Respond only using the information provided, do not make up any facts. Say if you do not know the answer.'),
+        ('system', f'Character Information:\n{context}'),
+    ]
+    
+    # Add conversation history
+    messages.extend(req_messages)
+    
+    ai_message = llm.invoke(messages)
+    answer = ai_message.content if (hasattr(ai_message, 'content')) else str(ai_message)
 
+    return answer
 
 # TODO Embeddings generator with document splitter
 
