@@ -152,3 +152,66 @@ def generate_chat_response_with_history(llm: ChatOllama, context: str, req_messa
 
 
 # TODO Vector store manager
+
+## Utility functions for vector chat management 
+
+async def create_vector_store_docs(documents: list, results: list) -> list:
+
+    import base64
+    docs_to_add = []
+
+
+    for doc_id , doc_data in documents.items():
+        try: 
+            pass
+            content_bytes = base64.b64decode(doc_data['content'])
+            text, ctype, _ = await extract_text_from_content(
+                content_bytes,
+                doc_data['name'],
+                doc_data['mime_type']
+            )
+
+            if text:
+
+                chunks = split_text_into_chunks_v2(text, ctype, file=None, chunk_size=1000, chunk_overlap=200)
+
+                for chunk in chunks :
+                    chunk.metadata.update({
+                        'doc_id' : doc_id,
+                        'filename' : doc_data['name'],
+                        'content_type' : doc_data['mime_type'],
+                    })
+                
+                docs_to_add.extend(chunks)
+
+                return docs_to_add, results
+        except Exception as chunk_error:
+            results.append({"error": f"Failed to process {doc_data['name']}: {str(chunk_error)}"})
+
+            return docs_to_add, results
+
+def vector_search_hits(vector_store, embeddings, results ,  k: int) -> list:
+
+    for doc_id, embedding_vector in embeddings.items():
+
+        hits = vector_store.similarity_search_by_vector(embedding_vector,k=k)
+
+        results.extend([
+            {
+                'doc_id' : doc_id,
+                'filename' : h.metadata.get('filename'),
+                'text_snippet' : h.page_content[:500] + '...',
+            }
+
+            for h in hits
+        ])
+    
+    return results
+
+def get_context_similarity_search(vector_store, embeddings, k: int)  -> str:
+    context = '\n'.join([hit.page_content for hit in vector_store.similarity_search_by_vector(
+        list(embeddings.values())[0] , k=k
+    ) if vector_store and embeddings]) if vector_store and embeddings else ''
+
+    return context
+

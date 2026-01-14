@@ -20,8 +20,7 @@ from PyPDF2 import PdfReader
 
 from typing import Dict, Optional
 
-
-from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history
+from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history, create_vector_store_docs, vector_search_hits, get_context_similarity_search
 
 router = APIRouter(
     prefix='/lab',
@@ -294,33 +293,37 @@ async def post_rag_chat_ollama(request: ChatRequest):
         # Extract and add documents to vector store if provided
         if request.documents:
             import base64
+
             docs_to_add = []
+
+            docs_to_add, results = await create_vector_store_docs(request.documents, results)
             
-            for doc_id, doc_data in request.documents.items():
-                try:
-                    # Decode base64 content
-                    content_bytes = base64.b64decode(doc_data['content'])
-                    text, ctype, _ = await extract_text_from_content(
-                        content_bytes,
-                        doc_data['name'],
-                        doc_data['mime_type']
-                    )
+            # for doc_id, doc_data in request.documents.items():
+            #     try:
+            #         # Decode base64 content
+
+            #         content_bytes = base64.b64decode(doc_data['content'])
+            #         text, ctype, _ = await extract_text_from_content(
+            #             content_bytes,
+            #             doc_data['name'],
+            #             doc_data['mime_type']
+            #         )
                     
-                    if text:
-                        # Split into chunks using v2 (handles None file)
-                        chunks = split_text_into_chunks_v2(text, ctype, file=None, chunk_size=1000, chunk_overlap=200)
+            #         if text:
+            #             # Split into chunks using v2 (handles None file)
+            #             chunks = split_text_into_chunks_v2(text, ctype, file=None, chunk_size=1000, chunk_overlap=200)
                         
-                        # Add metadata to chunks
-                        for chunk in chunks:
-                            chunk.metadata.update({
-                                "doc_id": doc_id,
-                                "filename": doc_data['name'],
-                                "content_type": doc_data['mime_type']
-                            })
+            #             # Add metadata to chunks
+            #             for chunk in chunks:
+            #                 chunk.metadata.update({
+            #                     "doc_id": doc_id,
+            #                     "filename": doc_data['name'],
+            #                     "content_type": doc_data['mime_type']
+            #                 })
                         
-                        docs_to_add.extend(chunks)
-                except Exception as chunk_error:
-                    results.append({"error": f"Failed to process {doc_data['name']}: {str(chunk_error)}"})
+            #             docs_to_add.extend(chunks)
+            #     except Exception as chunk_error:
+            #         results.append({"error": f"Failed to process {doc_data['name']}: {str(chunk_error)}"})
             
             # Add to vector store
             if docs_to_add:
@@ -331,21 +334,37 @@ async def post_rag_chat_ollama(request: ChatRequest):
         
         # Perform similarity search using embeddings
         if vector_store is not None and request.embeddings:
-            for doc_id, embedding_vector in request.embeddings.items():
-                hits = vector_store.similarity_search_by_vector(embedding_vector, k=10)
-                results.extend([
-                    {
-                        "doc_id": doc_id,
-                        "filename": h.metadata.get('filename'),
-                        "text_snippet": h.page_content[:500],
-                    }
-                    for h in hits
-                ])
 
-        # Generate AI response with context from retrieved documents
-        context = "\n".join([hit.page_content for hit in vector_store.similarity_search_by_vector(
-            list(request.embeddings.values())[0], k=5
-        ) if vector_store and request.embeddings]) if vector_store and request.embeddings else ""
+
+            # turn this into a utility function
+
+            results = vector_search_hits(
+                vector_store,
+                request.embeddings,
+                results,
+                k=3
+            )
+            # for doc_id, embedding_vector in request.embeddings.items():
+            #     hits = vector_store.similarity_search_by_vector(embedding_vector, k=3)
+            #     results.extend([
+            #         {
+            #             "doc_id": doc_id,
+            #             "filename": h.metadata.get('filename'),
+            #             "text_snippet": h.page_content[:500] + '...',
+            #         }
+            #         for h in hits
+            #     ])
+
+        # # Generate AI response with context from retrieved documents
+        # context = "\n".join([hit.page_content for hit in vector_store.similarity_search_by_vector(
+        #     list(request.embeddings.values())[0], k=3
+        # ) if vector_store and request.embeddings]) if vector_store and request.embeddings else ""
+
+        context = get_context_similarity_search(
+            vector_store,
+            embeddings=request.embeddings,
+            k=3
+        )
         
         ai_response = generate_chat_response_with_history(llm, context, req_messages)
 
@@ -370,8 +389,16 @@ async def post_rag_chat_ollama(request: ChatRequest):
 
     except Exception as e:
 
+        # return {
+        #     "error": str(e),
+        #     "messages" : req_messages,
+        #     "embeddings" : request.embeddings
+        # }
+    
         return {
-            "error": str(e),
-            "messages" : req_messages,
-            "embeddings" : request.embeddings
-        }
+        "error": str(e),
+        "ai_response": f"Error: {str(e)}",  # Add this
+        "results": [],  # Add this
+        "messages": req_messages,
+        "embeddings": request.embeddings
+    }
