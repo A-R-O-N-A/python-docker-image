@@ -20,7 +20,7 @@ from PyPDF2 import PdfReader
 
 from typing import Dict, Optional
 
-from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history, create_vector_store_docs, vector_search_hits, get_context_similarity_search
+from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history, create_vector_store_docs, vector_search_hits, get_context_similarity_search, perform_vector_bm25_similarity_search
 
 router = APIRouter(
     prefix='/lab',
@@ -90,7 +90,8 @@ def post_ollama_chat(request: LabBase):
 @router.post('/test/ping')
 def post_ping(request: PingResponse):
 
-    return {"message_ping": request.messages}
+    # return {"message_ping": request.messages}
+    return {"message": f'Successfully processed by FastAPI : " {request.message} "'}
 
 @router.post('/test/array')
 def post_ollama_array(request: ChatRequest):
@@ -242,7 +243,8 @@ async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[st
         ## Similarity search from vector via query
         # TODO test the utility function
 
-        hits, results = perform_vector_similarity_search(vector_store, query, text, top_k=5)
+        # hits, results = perform_vector_similarity_search(vector_store, query, text, top_k=5)
+        hits, results = perform_vector_bm25_similarity_search(vector_store, query, text, top_k=5)
 
         ## LLM answer using retrieved context
         # TODO test the utility function
@@ -258,7 +260,7 @@ async def post_rag_file_chat_v2(file: UploadFile = File(...), query: Optional[st
         "embeddings": vector,
         "results": results,
         "query": query,
-        "answer": answer,
+        "answer": answer
     }
 
 @router.post('/test/rag/file/vectorize/', response_model=RAGVectorizeResponse)

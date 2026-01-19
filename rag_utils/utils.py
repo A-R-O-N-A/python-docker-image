@@ -3,6 +3,11 @@ from io import BytesIO
 from fastapi import UploadFile, File
 from langchain_ollama import ChatOllama
 
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers import EnsembleRetriever
+
+# from langchain.retrievers import BaseRetrieverv{}
+
 # TODO File content extractor
 async def extract_text_from_content(content: bytes, filename: str, content_type: str):
     """Extract text from raw file content"""
@@ -112,7 +117,41 @@ def perform_vector_similarity_search(vector_store, query: str,text: str ,top_k: 
 
     return hits, results
 
-# TODO LLM chat handler
+# TODO Vector search for BM2 5  
+
+def perform_vector_bm25_similarity_search(vector_store, query: str, text: str, top_k: int=5) -> list[dict]:
+    
+    search_text = query if query else text[:800]
+
+    # Get all documents from vector store for BM25
+    all_docs = vector_store.similarity_search("", k=vector_store._collection.count() if hasattr(vector_store, '_collection') else 100)
+    
+    # Create BM25 retriever
+    bm25_retriever = BM25Retriever.from_documents(all_docs)
+    bm25_retriever.k = top_k
+    
+    # Create vector store retriever
+    vector_retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
+    
+    # Combine both retrievers with ensemble (hybrid search)
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[bm25_retriever, vector_retriever],
+        weights=[0.5, 0.5]  # Equal weight to BM25 and vector search
+    )
+    
+    # Get results using invoke() instead of get_relevant_documents()
+    hits = ensemble_retriever.invoke(search_text)[:top_k]
+
+    results = [
+        {
+            "filename": h.metadata.get('filename'),
+            "content_type": h.metadata.get('content_type'),
+            "text_snippet": h.page_content[:300],
+        }
+        for h in hits
+    ]
+
+    return hits, results
 
 def generate_chat_response(llm: ChatOllama, query: str, hits: list) -> str:
 
