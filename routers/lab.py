@@ -29,8 +29,7 @@ router = APIRouter(
 
 embeddings = OllamaEmbeddings(
     # model=settings.LLM_EMBEDDING_MODEL,
-    # model='mxbai-embed-large:latest',
-    model='nomic-embed-text:latest',
+    model='mxbai-embed-large:latest',
     base_url="http://72.62.69.183:11434"
     )
 
