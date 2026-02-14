@@ -144,11 +144,13 @@ def perform_vector_bm25_similarity_search(vector_store, query: str, text: str, t
 
     results = [
         {
+            "doc_id" : h.metadata.get('doc_id'),
             "filename": h.metadata.get('filename'),
             "content_type": h.metadata.get('content_type'),
             "text_snippet": h.page_content[:300],
         }
         for h in hits
+        # for idx, h in enumerate(hits)
     ]
 
     return hits, results
@@ -254,3 +256,51 @@ def get_context_similarity_search(vector_store, embeddings, k: int)  -> str:
 
     return context
 
+def generate_chat_response_with_bm25(llm: ChatOllama, vector_store, query: str, req_messages: list) -> str:
+    """Generate chat response using BM25 hybrid search with conversation history"""
+    
+    # Perform BM25 hybrid search to get relevant context
+    search_text = query if query else req_messages[-1][1] if req_messages else ""
+    
+    if vector_store and search_text:
+        try:
+            # Get all documents from vector store for BM25
+            all_docs = vector_store.similarity_search("", k=vector_store._collection.count() if hasattr(vector_store, '_collection') else 100)
+            
+            # Create BM25 retriever
+            bm25_retriever = BM25Retriever.from_documents(all_docs)
+            bm25_retriever.k = 3
+            
+            # Create vector store retriever
+            vector_retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+            
+            # Combine both retrievers with ensemble (hybrid search)
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[bm25_retriever, vector_retriever],
+                weights=[0.5, 0.5]
+            )
+            
+            # Get results
+            hits = ensemble_retriever.invoke(search_text)[:3]
+            context = "\n\n".join(h.page_content[:800] for h in hits)
+            
+        except Exception as e:
+            context = ""
+    else:
+        context = ""
+    
+    # Build messages with system context and conversation history
+    messages = [
+        ("system", f"You are the character described in this document. Respond as this character using the provided information about yourself. Stay in character and use first person."),
+        ('system', f'Respond briefly, keep responses simple, clean, with a maximum of one sentence.'),
+        ('system', f'Respond only using the information provided, do not make up any facts. Say if you do not know the answer.'),
+        ('system', f'Character Information:\n{context}'),
+    ]
+    
+    # Add conversation history
+    messages.extend(req_messages)
+    
+    ai_message = llm.invoke(messages)
+    answer = ai_message.content if (hasattr(ai_message, 'content')) else str(ai_message)
+
+    return answer

@@ -21,7 +21,7 @@ class RAGFileResponse(BaseModel):
     filename: str
     content_type: str
     size_bytes: int
-    embeddings : Optional[list[float]] = None
+    embeddings : Optional[list[list[float]]] = None
     results : Optional[list[dict[str, Any]]] = None
     query : Optional[str] = None,
     answer : Optional[str] = None,
@@ -38,5 +38,5 @@ class RAGVectorizeResponse(BaseModel):
     filename: str
     content_type: str
     size_bytes: int
-    embeddings : Optional[list[float]] = None
+    embeddings : Optional[list[list[float]]] = None
 
