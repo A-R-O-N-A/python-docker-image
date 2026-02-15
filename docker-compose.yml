@@ -1,7 +1,7 @@
 services:
  app:
- build: .
- container_name: python_docker_image
- ports:
- - "8000:8000"
- restart: unless-stopped
+  build: .
+  container_name: python_docker_image
+  ports:
+    - "8000:8000"
+  restart: unless-stopped
