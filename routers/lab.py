@@ -80,8 +80,8 @@ def get_test_chat_endpoint(test_chat: str):
 llm = ChatOllama(
     # model=settings.LLM_MODEL,
     # model="mistral:7b",
-    model='mistral:7b-instruct-q2_K',
-    # model="llama3.2:3b",
+    # model='mistral:7b-instruct-q2_K',
+    model="llama3.2:3b",
     temperature=0.5,
     base_url="http://72.62.69.183:11434"
 )
