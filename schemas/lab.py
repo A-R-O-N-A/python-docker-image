@@ -40,3 +40,12 @@ class RAGVectorizeResponse(BaseModel):
     size_bytes: int
     embeddings : Optional[list[list[float]]] = None
 
+class OCRImageRequest(BaseModel):
+    image: Annotated[UploadFile, File()]
+
+
+class OCRImageResponse(BaseModel):
+    filename: str
+    content_type: str
+    size_bytes: int
+    text: Optional[str] = None

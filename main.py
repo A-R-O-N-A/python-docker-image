@@ -7,6 +7,7 @@ from .db.database import create_tables
 
 
 from .routers import lab
+from .routers import ocr
 
 
 create_tables()
@@ -35,6 +36,9 @@ app.include_router(job.router, prefix=settings.API_PREFIX)
 
 # testing to add the lab router
 app.include_router(lab.router, prefix=settings.API_PREFIX)
+
+# testing to add the OCR router
+app.include_router(ocr.router, prefix=settings.API_PREFIX)
 
 if __name__ == "__main__":
     import uvicorn
