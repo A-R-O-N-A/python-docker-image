@@ -32,7 +32,10 @@ async def process_image(image: UploadFile = File(...)):
 
     image_b64 = base64.b64encode(contents).decode('utf-8')
 
-    response = ollama.chat(
+    client = ollama.Client('http://72.62.69.183:11434')
+
+    #response = ollama.chat(
+    response = client.chat(
         model='glm-ocr:latest',
         messages=[{
             'role': 'user',
