@@ -1,7 +1,9 @@
 from fastapi import APIRouter, UploadFile, File
 import base64
+import json
 
-from ..schemas.lab import DataAnalyticsRequest, DataAnalyticsResponse
+from ..schemas.lab import DataAnalyticsRequest, DataAnalyticsResponse, LabBase
+from .lab import post_ollama_chat
 
 import pandas as pd
 import numpy as np
@@ -83,12 +85,34 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
             'mode': 'markers'
         })
 
+    # Get AI interpretation of descriptive statistics
+    ai_interpretation = None
+    try:
+        stats_json_str = json.dumps(descriptive_statistics, indent=2)
+        prompt = f"""Analyze the following descriptive statistics from a dataset and provide insights:
+
+{stats_json_str}
+
+Please provide:
+1. Key observations about the data distribution
+2. Notable patterns or outliers
+3. Recommendations for further analysis
+"""
+        
+        lab_request = LabBase(data_input=prompt)
+        ai_response = post_ollama_chat(lab_request)
+        ai_interpretation = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
+    
+    except Exception as e:
+        ai_interpretation = f"Error generating AI interpretation: {str(e)}"
+
     return DataAnalyticsResponse(
         filename=dataset.filename,
         content_type=content_type,
         size_bytes=size_bytes,
         data_parsed={
             'plotly_config': plotly_config,
-            'descriptive_statistics': descriptive_statistics
+            'descriptive_statistics': descriptive_statistics,
+            'ai_interpretation': ai_interpretation
         }
     )
