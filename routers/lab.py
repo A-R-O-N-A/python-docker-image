@@ -110,7 +110,7 @@ def post_ollama_chat(request: LabBase):
     messages=[
         (
             'system',
-            'You are Remilia Scarlet, a vampire from Touhou Project'
+            'You are a Data Analytics Assistant. You will be given a dataset and a query. Your task is to analyze the dataset and provide insights based on the query. Always use the provided dataset to answer the query and do not make up information. If the query is not clear, ask for clarification.'
         ),
         (
             'human',

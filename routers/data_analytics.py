@@ -25,6 +25,7 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
     dataset_b64 = base64.b64encode(contents).decode('utf-8')
     content_type = dataset.content_type or "application/octet-stream"
 
+
     # read the data as pandas
     df = pd.read_csv(dataset.file)
     data_parsed = {
@@ -33,7 +34,7 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
         'row_count' : len(df)
     }
 
-        # Auto-detect numerical and categorical columns
+    # Auto-detect numerical and categorical columns
     numerical_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
@@ -42,6 +43,12 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
         'numerical_columns': numerical_cols,
         'categorical_columns': categorical_cols,
         'traces': []
+    }
+
+    # Descriptive statistics
+    descriptive_statistics = {
+        'overall': df[numerical_cols].describe().to_dict() if numerical_cols else {},
+        'per_trace': {}
     }
 
     # Create default traces (one per categorical column or single trace if none)
@@ -60,6 +67,10 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
                 'type': 'scatter',
                 'mode': 'markers'
             })
+            
+            # Per-trace descriptive stats
+            descriptive_statistics['per_trace'][str(category)] = subset[numerical_cols].describe().to_dict()
+
     elif numerical_cols:
         # No categorical; single trace with first two numerical columns
         x_col = numerical_cols[0]
@@ -72,14 +83,12 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
             'mode': 'markers'
         })
 
-
     return DataAnalyticsResponse(
         filename=dataset.filename,
         content_type=content_type,
         size_bytes=size_bytes,
-        # data_parsed=data_parsed
         data_parsed={
-            'plotly_config' : plotly_config
-            # 'data' : data_parsed,
+            'plotly_config': plotly_config,
+            'descriptive_statistics': descriptive_statistics
         }
     )
