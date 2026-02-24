@@ -49,3 +49,4 @@ class OCRImageResponse(BaseModel):
     content_type: str
     size_bytes: int
     text: Optional[str] = None
+    model: Optional[str] = None

@@ -60,6 +60,8 @@ def test_ocr():
 async def process_image(image: UploadFile = File(...)):
     # ...existing code...
 
+    model_name = ''
+
     contents = await image.read()
     size_bytes = len(contents)
     await image.seek(0)
@@ -67,33 +69,34 @@ async def process_image(image: UploadFile = File(...)):
     image_b64 = base64.b64encode(contents).decode('utf-8')
     content_type = image.content_type or "image/png"
 
-    # --- old Ollama implementation (kept for reference) ---
-    # client = ollama.Client('http://72.62.69.183:11434')
-    # response = client.chat(
-    #     model='glm-ocr:latest',
-    #     messages=[{
-    #         'role': 'user',
-    #         'content': 'Extract text from this image.',
-    #         'images': [image_b64]
-    #     }]
-    # )
-    # extracted_text = response['message']['content']
-    # --- end old Ollama implementation ---
-
-    llm = ChatGoogleGenerativeAI(model="gemini-flash-lite-latest")
-    response = llm.invoke([{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Extract text from this image."},
-            {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{image_b64}"}}
-        ]
-    }])
-
-    extracted_text = response.content
+    try:
+        llm = ChatGoogleGenerativeAI(model="gemini-flash-lite-latest")
+        response = llm.invoke([{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Extract text from this image. Return only the extracted text without any additional commentary."},
+                {"type": "image_url", "image_url": {"url": f"data:{content_type};base64,{image_b64}"}}
+            ]
+        }])
+        extracted_text = response.content
+        model_name = 'gemini-flash-lite-latest'
+    except Exception:
+        client = ollama.Client('http://72.62.69.183:11434')
+        response = client.chat(
+            model='glm-ocr:latest',
+            messages=[{
+                'role': 'user',
+                'content': 'Extract text from this image. Return only the extracted text without any additional commentary.',
+                'images': [image_b64]
+            }]
+        )
+        extracted_text = response['message']['content']
+        model_name = 'glm-ocr:latest'
 
     return OCRImageResponse(
         filename=image.filename,
         content_type=image.content_type or "application/octet-stream",
         size_bytes=size_bytes,
-        text=extracted_text
+        text=extracted_text,
+        model=model_name
     )
