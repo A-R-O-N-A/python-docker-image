@@ -50,3 +50,12 @@ class OCRImageResponse(BaseModel):
     size_bytes: int
     text: Optional[str] = None
     model: Optional[str] = None
+
+class DataAnalyticsRequest(BaseModel):
+    dataset: Annotated[UploadFile, File()]
+
+class DataAnalyticsResponse(BaseModel):
+    filename: str
+    content_type: str
+    size_bytes: int
+    data_parsed: Optional[dict[str, Any]] = None
