@@ -41,9 +41,12 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
     categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
     # Generate Plotly config
+    supported_trace_types = ['scatter', 'box', 'violin', 'histogram']
     plotly_config = {
         'numerical_columns': numerical_cols,
         'categorical_columns': categorical_cols,
+        'supported_trace_types': supported_trace_types,
+        'default_plot_type': 'scatter' ,
         'traces': []
     }
 
@@ -66,7 +69,7 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
                 'x': subset[x_col].tolist() if x_col else list(range(len(subset))),
                 'y': subset[y_col].tolist(),
                 'name': str(category),
-                'type': 'scatter',
+                'type': supported_trace_types,
                 'mode': 'markers'
             })
             
@@ -81,30 +84,35 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
             'x': df[x_col].tolist(),
             'y': df[y_col].tolist(),
             'name': f'{y_col} vs {x_col}',
-            'type': 'scatter',
+            'type': supported_trace_types,
             'mode': 'markers'
         })
 
     # Get AI interpretation of descriptive statistics
-    ai_interpretation = None
-    try:
-        stats_json_str = json.dumps(descriptive_statistics, indent=2)
-        prompt = f"""Analyze the following descriptive statistics from a dataset and provide insights:
+    # ai_interpretation = None
+    ai_interpretation = 'Currently disabled for dev testing.'
 
-{stats_json_str}
+    # IMPORTANT
+    # UNCOMMENT the following block to enable AI interpretation of descriptive statistics using Ollama chat
 
-Please provide:
-1. Key observations about the data distribution
-2. Notable patterns or outliers
-3. Recommendations for further analysis
-"""
+    # try:
+    #     stats_json_str = json.dumps(descriptive_statistics, indent=2)
+    #     prompt = f"""Analyze the following descriptive statistics from a dataset and provide insights:
+
+    #     {stats_json_str}
+
+    #     Please provide:
+    #     1. Key observations about the data distribution
+    #     2. Notable patterns or outliers
+    #     3. Recommendations for further analysis
+    #     """
         
-        lab_request = LabBase(data_input=prompt)
-        ai_response = post_ollama_chat(lab_request)
-        ai_interpretation = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
+    #     lab_request = LabBase(data_input=prompt)
+    #     ai_response = post_ollama_chat(lab_request)
+    #     ai_interpretation = ai_response.content if hasattr(ai_response, 'content') else str(ai_response)
     
-    except Exception as e:
-        ai_interpretation = f"Error generating AI interpretation: {str(e)}"
+    # except Exception as e:
+    #     ai_interpretation = f"Error generating AI interpretation: {str(e)}"
 
     return DataAnalyticsResponse(
         filename=dataset.filename,

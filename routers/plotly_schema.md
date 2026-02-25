@@ -8,4 +8,15 @@ _per trace or category_
     type : 'scatter'
 
 
+_for box plots_ 
+    y : row
+    type : 'box'
+
+_for violin plots_
+    y : row
+    type : 'box'
+
+_for histogram_
+    x : row
+    type : 'histogram'
 
