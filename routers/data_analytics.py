@@ -8,6 +8,8 @@ from .lab import post_ollama_chat
 import pandas as pd
 import numpy as np
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 router = APIRouter(
     prefix='/data-analytics',
     tags=['Data Analytics']
@@ -121,8 +123,49 @@ async def process_data_analytics(dataset: UploadFile = File(...)):
         }
 
     # AI interpretation (disabled)
-    ai_interpretation = 'Currently disabled for dev testing.'
+    # ai_interpretation = 'Currently disabled for dev testing.'
+    # implement gemini interpretation of descriptive statistics
+    # llm = ChatGoogleGenerativeAI(model="gemini-flash-lite-latest")
 
+    # # below is a gemini-2.5-flast implementation, we dont have the money to keep using this other than for COR
+    # llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+
+    # stats_json = json.dumps(descriptive_statistics, ensure_ascii=False, indent=2)
+    # prompt = (
+    #     "Provide a concise interpretation of the following descriptive statistics for a dataset. "
+    #     "Focus on key insights, trends, and any potential data quality issues.\n\n"
+    #     f"{stats_json}"
+    # )
+
+    # response = llm.invoke(prompt)
+    # ai_interpretation = response.content if hasattr(response, "content") else str(response)
+
+    llm = ChatGoogleGenerativeAI(model="gemma-3-27b-it")
+
+    # Limit prompt to ~14k tokens (roughly 4 chars/token)
+    MAX_TOKENS = 14_000
+    CHARS_PER_TOKEN = 4
+    MAX_CHARS = MAX_TOKENS * CHARS_PER_TOKEN
+
+    instruction = (
+        "Provide a concise interpretation of the following descriptive statistics for a dataset. "
+        "Focus on key insights, trends, and any potential data quality issues.\n\n"
+    )
+
+    # compact JSON to save tokens
+    stats_json = json.dumps(descriptive_statistics, ensure_ascii=False, separators=(",", ":"))
+
+    # reserve room for instruction + truncation note
+    reserve = len(instruction) + 200
+    allowed_json_chars = max(0, MAX_CHARS - reserve)
+
+    if len(stats_json) > allowed_json_chars:
+        stats_json = stats_json[:allowed_json_chars] + '..."__truncated__":true}'
+
+    prompt = instruction + stats_json
+
+    response = llm.invoke(prompt)
+    ai_interpretation = response.content if hasattr(response, "content") else str(response)
     return DataAnalyticsResponse(
         filename=dataset.filename,
         content_type=content_type,

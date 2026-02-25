@@ -8,6 +8,10 @@ from langchain_classic.retrievers import EnsembleRetriever
 
 # from langchain.retrievers import BaseRetrieverv{}
 
+# related to google gemini
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
 # TODO File content extractor
 async def extract_text_from_content(content: bytes, filename: str, content_type: str):
     """Extract text from raw file content"""
@@ -269,10 +273,10 @@ def generate_chat_response_with_bm25(llm: ChatOllama, vector_store, query: str, 
             
             # Create BM25 retriever
             bm25_retriever = BM25Retriever.from_documents(all_docs)
-            bm25_retriever.k = 3
+            bm25_retriever.k = 6
             
             # Create vector store retriever
-            vector_retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+            vector_retriever = vector_store.as_retriever(search_kwargs={"k": 6})
             
             # Combine both retrievers with ensemble (hybrid search)
             ensemble_retriever = EnsembleRetriever(
@@ -281,7 +285,7 @@ def generate_chat_response_with_bm25(llm: ChatOllama, vector_store, query: str, 
             )
             
             # Get results
-            hits = ensemble_retriever.invoke(search_text)[:3]
+            hits = ensemble_retriever.invoke(search_text)[:6]
             context = "\n\n".join(h.page_content[:800] for h in hits)
             
         except Exception as e:
@@ -304,3 +308,134 @@ def generate_chat_response_with_bm25(llm: ChatOllama, vector_store, query: str, 
     answer = ai_message.content if (hasattr(ai_message, 'content')) else str(ai_message)
 
     return answer
+
+def generate_chat_response_with_bm25_gemini(
+    vector_store,
+    query: str,
+    req_messages: list,
+    # model: str = "gemini-flash-lite-latest"
+    model: str = "gemini-2.5-flash"
+    # model: str = "gemma-3-27b-it"
+) -> str:
+    """Generate chat response using Gemini + BM25 hybrid search with conversation history."""
+
+    search_text = query if query else (req_messages[-1][1] if req_messages else "")
+
+    if vector_store and search_text:
+        try:
+            all_docs = vector_store.similarity_search(
+                "",
+                k=vector_store._collection.count() if hasattr(vector_store, "_collection") else 100
+            )
+
+            bm25_retriever = BM25Retriever.from_documents(all_docs)
+            bm25_retriever.k = 6
+
+            vector_retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[bm25_retriever, vector_retriever],
+                weights=[0.5, 0.5]
+            )
+
+            hits = ensemble_retriever.invoke(search_text)[:6]
+            context = "\n\n".join(h.page_content[:800] for h in hits)
+        except Exception:
+            context = ""
+    else:
+        context = ""
+
+    messages = [
+        SystemMessage(
+            content="You are the character described in this document. Respond as this character using the provided information about yourself. Stay in character and use first person."
+        ),
+        SystemMessage(
+            content="Respond briefly, keep responses simple, clean, with a maximum of one sentence."
+        ),
+        SystemMessage(
+            content="Respond only using the information provided, do not make up any facts. Say if you do not know the answer."
+        ),
+        SystemMessage(content=f"Character Information:\n{context}"),
+    ]
+
+    for m in req_messages or []:
+        if isinstance(m, (tuple, list)) and len(m) >= 2:
+            role, content = str(m[0]).lower(), str(m[1])
+        elif isinstance(m, dict):
+            role, content = str(m.get("role", "human")).lower(), str(m.get("content", ""))
+        else:
+            continue
+
+        if role == "system":
+            messages.append(SystemMessage(content=content))
+        elif role in ("assistant", "ai"):
+            messages.append(AIMessage(content=content))
+        else:
+            messages.append(HumanMessage(content=content))
+
+    llm = ChatGoogleGenerativeAI(model=model)
+    ai_message = llm.invoke(messages)
+    return ai_message.content if hasattr(ai_message, "content") else str(ai_message)
+
+def generate_chat_response_with_bm25_gemma_27b(
+    vector_store,
+    query: str,
+    req_messages: list,
+    model: str = "gemma-3-27b-it"
+) -> str:
+    """Generate chat response using Gemma 27B + BM25 hybrid search with conversation history."""
+
+    search_text = query if query else (req_messages[-1][1] if req_messages else "")
+
+    if vector_store and search_text:
+        try:
+            all_docs = vector_store.similarity_search(
+                "",
+                k=vector_store._collection.count() if hasattr(vector_store, "_collection") else 100
+            )
+
+            bm25_retriever = BM25Retriever.from_documents(all_docs)
+            bm25_retriever.k =  4
+
+            vector_retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[bm25_retriever, vector_retriever],
+                weights=[0.5, 0.5]
+            )
+
+            hits = ensemble_retriever.invoke(search_text)[:4]
+            context = "\n\n".join(h.page_content[:800] for h in hits)
+        except Exception:
+            context = ""
+    else:
+        context = ""
+
+    # Flatten conversation history to avoid system-instruction incompatibility
+    history_lines = []
+    for m in req_messages or []:
+        if isinstance(m, (tuple, list)) and len(m) >= 2:
+            role, content = str(m[0]).upper(), str(m[1])
+            history_lines.append(f"{role}: {content}")
+        elif isinstance(m, dict):
+            role = str(m.get("role", "USER")).upper()
+            content = str(m.get("content", ""))
+            history_lines.append(f"{role}: {content}")
+
+    history_text = "\n".join(history_lines).strip()
+
+    prompt = (
+        "You are the character described in this document. "
+        "Respond as this character using the provided information about yourself. "
+        "Stay in character and use first person.\n"
+        "Respond briefly, keep responses simple, clean, with a maximum of one sentence.\n"
+        "Respond only using the information provided, do not make up any facts. "
+        "Say if you do not know the answer.\n\n"
+        f"Character Information:\n{context}\n\n"
+        f"Conversation History:\n{history_text}\n\n"
+        f"User Query:\n{search_text}"
+    )
+
+    llm = ChatGoogleGenerativeAI(model=model)
+    ai_message = llm.invoke([HumanMessage(content=prompt)])
+    return ai_message.content if hasattr(ai_message, "content") else str(ai_message)

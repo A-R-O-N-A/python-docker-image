@@ -20,7 +20,7 @@ from PyPDF2 import PdfReader
 
 from typing import Dict, Optional
 
-from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history, create_vector_store_docs, vector_search_hits, get_context_similarity_search, perform_vector_bm25_similarity_search, generate_chat_response_with_bm25
+from ..rag_utils.utils import extract_text_from_file, split_text_into_chunks, perform_vector_similarity_search, generate_chat_response, extract_text_from_content, split_text_into_chunks_v2, generate_chat_response_with_history, create_vector_store_docs, vector_search_hits, get_context_similarity_search, perform_vector_bm25_similarity_search, generate_chat_response_with_bm25, generate_chat_response_with_bm25_gemini, generate_chat_response_with_bm25_gemma_27b
 
 router = APIRouter(
     prefix='/lab',
@@ -423,13 +423,35 @@ async def post_rag_chat_ollama_bm25(request: ChatRequest):
         # Perform BM25 hybrid search to get results
         if vector_store is not None and query:
             try:
-                hits, bm25_results = perform_vector_bm25_similarity_search(vector_store, query, query, top_k=3)
+                hits, bm25_results = perform_vector_bm25_similarity_search(vector_store, query, query, top_k=6)
                 results.extend(bm25_results)
             except Exception as search_error:
                 print(f"BM25 search error: {search_error}")
         
         # Generate AI response using BM25 hybrid search
-        ai_response = generate_chat_response_with_bm25(llm, vector_store, query, req_messages)
+        # this is ollama
+        # ai_response = generate_chat_response_with_bm25(llm, vector_store, query, req_messages)
+
+        # this is gemini
+        # ai_response = generate_chat_response_with_bm25_gemini(vector_store, query, req_messages)
+
+        # Gemini first, fallback to Ollama if Gemini fails
+        try:
+
+            # ai_response = generate_chat_response_with_bm25_gemini(
+            #     vector_store, query, req_messages
+            # )
+
+            ai_response = generate_chat_response_with_bm25_gemma_27b(
+                vector_store, query, req_messages
+            )
+
+        except Exception as gemini_error:
+            print(f"Gemini error, falling back to Ollama: {gemini_error}")
+            ai_response = generate_chat_response_with_bm25(
+                llm, vector_store, query, req_messages
+            )
+
 
         return {
             "ai_response": ai_response,
