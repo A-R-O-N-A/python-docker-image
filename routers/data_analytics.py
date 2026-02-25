@@ -41,7 +41,7 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
     categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
     # Generate Plotly config
-    supported_trace_types = ['scatter', 'box', 'violin', 'histogram']
+    supported_trace_types = ['scatter', 'scatter3d' ,'box', 'violin', 'histogram']
     plotly_config = {
         'numerical_columns': numerical_cols,
         'categorical_columns': categorical_cols,
@@ -62,12 +62,14 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
         category_col = categorical_cols[0]
         x_col = numerical_cols[0] if len(numerical_cols) > 0 else None
         y_col = numerical_cols[1] if len(numerical_cols) > 1 else numerical_cols[0]
+        z_col = numerical_cols[2] if len(numerical_cols) > 2 else y_col
 
         for category in df[category_col].unique():
             subset = df[df[category_col] == category]
             plotly_config['traces'].append({
                 'x': subset[x_col].tolist() if x_col else list(range(len(subset))),
                 'y': subset[y_col].tolist(),
+                'z': subset[z_col].tolist() if z_col else list(range(len(subset))),
                 'name': str(category),
                 'type': supported_trace_types,
                 'mode': 'markers'
@@ -80,9 +82,12 @@ async def process_data_analytics(dataset: UploadFile = File(...)) :
         # No categorical; single trace with first two numerical columns
         x_col = numerical_cols[0]
         y_col = numerical_cols[1] if len(numerical_cols) > 1 else numerical_cols[0]
+        z_col = numerical_cols[2] if len(numerical_cols) > 2 else y_col
+
         plotly_config['traces'].append({
             'x': df[x_col].tolist(),
             'y': df[y_col].tolist(),
+            'z': df[z_col].tolist(),
             'name': f'{y_col} vs {x_col}',
             'type': supported_trace_types,
             'mode': 'markers'
