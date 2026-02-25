@@ -89,6 +89,37 @@ async def process_data_analytics(dataset: UploadFile = File(...)):
             'mode': 'markers'           # dots only
         })
 
+        # Parallel coordinates config (separate from trace switching pipeline)
+    parallel_coords_config = {
+        'enabled': bool(numerical_cols),
+        'trace': None,
+        'layout': {
+            'width': 800
+        }
+    }
+
+    if numerical_cols:
+        dimensions = []
+        for col in numerical_cols:
+            series = df[col]
+            valid = series.dropna()
+
+            if valid.empty:
+                col_min, col_max = 0.0, 0.0
+            else:
+                col_min, col_max = float(valid.min()), float(valid.max())
+
+            dimensions.append({
+                'label': col,
+                'range': [col_min, col_max],
+                'values': [None if pd.isna(v) else float(v) for v in series.tolist()]
+            })
+
+        parallel_coords_config['trace'] = {
+            'type': 'parcoords',
+            'dimensions': dimensions
+        }
+
     # AI interpretation (disabled)
     ai_interpretation = 'Currently disabled for dev testing.'
 
@@ -98,6 +129,7 @@ async def process_data_analytics(dataset: UploadFile = File(...)):
         size_bytes=size_bytes,
         data_parsed={
             'plotly_config': plotly_config,
+            'parallel_coords_config': parallel_coords_config,
             'descriptive_statistics': descriptive_statistics,
             'ai_interpretation': ai_interpretation
         }
