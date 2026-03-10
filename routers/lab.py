@@ -8,9 +8,12 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 import pdfplumber
 
-from ..schemas.lab import LabBase, PingResponse, ChatRequest, RAGFileRequest, RAGFileResponse, RAGChatRequest, RAGVectorizeResponse 
+from ..schemas.lab import LabBase, PingResponse, ChatRequest, RAGFileRequest, RAGFileResponse, RAGChatRequest, RAGVectorizeResponse , BasicChatRequest
 
 from ..core.config import settings
 
@@ -466,3 +469,70 @@ async def post_rag_chat_ollama_bm25(request: ChatRequest):
             "messages": req_messages,
             "embeddings": request.embeddings
         }
+
+
+@router.post('/sentiment-analysis/report')
+async def post_sentiment_analysis_report(request: BasicChatRequest):
+    gemini_llm = ChatGoogleGenerativeAI(
+        model="gemma-3-27b-it",
+        temperature=0.3
+    )
+
+    MAX_INPUT_TOKENS = 14_000
+
+    def truncate_to_token_limit(text: str, max_tokens: int) -> str:
+        """
+        Truncate text to <= max_tokens using model token counting.
+        Falls back to a conservative char estimate if token counting is unavailable.
+        """
+        if not text:
+            return text
+
+        # Preferred: exact-ish model tokenizer count
+        try:
+            if gemini_llm.get_num_tokens(text) <= max_tokens:
+                return text
+
+            lo, hi = 0, len(text)
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                candidate = text[:mid]
+                if gemini_llm.get_num_tokens(candidate) <= max_tokens:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            return text[:lo]
+        except Exception:
+            # Fallback: rough estimate ~4 chars/token
+            max_chars = max_tokens * 4
+            return text[:max_chars]
+
+    trimmed_user_message = truncate_to_token_limit(request.message, MAX_INPUT_TOKENS)
+
+    prompt = (
+        "You are a sentiment analysis assistant.\n"
+        "Analyze the user message and return ONLY a Markdown text report.\n"
+        "Do not return JSON. Do not wrap output in code fences.\n\n"
+        "Use this exact structure:\n"
+        "# Sentiment Analysis Report\n"
+        "## Overall Sentiment\n"
+        "- Label: <Positive|Negative|Neutral|Mixed>\n"
+        "- Confidence: <0-100>%\n"
+        "## Emotion Breakdown\n"
+        "- Primary emotion: <emotion>\n"
+        "- Secondary emotions: <comma-separated list or None>\n"
+        "## Key Signals\n"
+        "- <bullet point>\n"
+        "- <bullet point>\n"
+        "## Short Rationale\n"
+        "<2-4 concise sentences grounded in the user text>\n"
+        "## Suggested Response\n"
+        "<short empathetic response suggestion>\n\n"
+        f"User message:\n{trimmed_user_message}"
+    )
+
+    ai_response = gemini_llm.invoke([HumanMessage(content=prompt)])
+
+    return {
+        "sentiment_report": ai_response.content
+    }

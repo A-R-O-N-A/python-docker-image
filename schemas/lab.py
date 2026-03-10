@@ -59,3 +59,6 @@ class DataAnalyticsResponse(BaseModel):
     content_type: str
     size_bytes: int
     data_parsed: Optional[dict[str, Any]] = None
+
+class BasicChatRequest(BaseModel):
+    message: str
